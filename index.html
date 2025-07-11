@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>London Station Guessing Game</title>
+  <meta charset="utf-8" />
+  <style>
+    #map { height: 600px; width: 100%; }
+    body { font-family: sans-serif; margin: 0; padding: 0; }
+    #info { padding: 10px; }
+    #endOptions { display: none; padding: 10px; }
+    #results { padding: 10px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 5px; text-align: left; }
+    button { padding: 5px 10px; margin-right: 5px; }
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+
+<div id="info">
+  <h2>Guess the location of: <span id="stationName"></span></h2>
+  <p>Click on the map to place your guess!</p>
+  <p>Penalty Points: <span id="score">0</span></p>
+</div>
+<div id="map"></div>
+
+<div id="results">
+  <h3>Results</h3>
+  <table id="resultsTable">
+    <thead>
+      <tr><th>Station</th><th>Distance (m)</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div id="endOptions">
+  <button onclick="restartGame()">Restart Game</button>
+  <button onclick="copyTable()">Copy Table</button>
+  <button onclick="downloadCSV()">Download CSV</button>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+const stations = [
+ { name: "Green Park", lat: 51.50635747, lon: -0.140937126 },
+ { name: "Angel", lat: 51.5309796, lon: -0.103116359 },
+ { name: "Archway", lat: 51.56403452, lon: -0.13344404 },
+ { name: "Vauxhall", lat: 51.48518446, lon: -0.122646146 },
+ { name: "Waterloo", lat: 51.50291418, lon: -0.112818812 },
+ { name: "Brixton", lat: 51.46215131, lon: -0.113288835 },
+ { name: "Turnpike Lane", lat: 51.58975112, lon: -0.101359413 },
+ { name: "Belsize Park", lat: 51.54982085, lon: -0.163016956 },
+ { name: "Colliers Wood", lat: 51.41763979, lon: -0.176460893 },
+ { name: "Chancery Lane", lat: 51.5177395, lon: -0.109960547 },
+ { name: "Bermondsey", lat: 51.49718984, lon: -0.062745893 },
+ { name: "Marble Arch", lat: 51.51309055, lon: -0.155755638 },
+ { name: "Queensway", lat: 51.50974305, lon: -0.185538472 },
+ { name: "Blackhorse Road", lat: 51.58633801, lon: -0.040174342 },
+ { name: "Finsbury Park", lat: 51.56406609, lon: -0.105068129 }
+
+];
+
+// Basic baked-in Tube lines (simplified & partial) as LineStrings
+const tubeLines = [
+  { color: '#E32017', coords: [ // Central Line
+  [51.56913097, -0.436073394],  // West Ruislip
+  [51.56027575, -0.409140537],  // Ruislip Gardens
+  [51.55635983, -0.39728854],  // South Ruislip
+  [51.54775741, -0.367069735],  // Northolt
+  [51.54208841, -0.34492109],  // Greenford
+  [51.53624702, -0.32183979],  // Perivale
+  [51.52968038, -0.291095909],  // Hanger Lane
+  [51.52310534, -0.258167978],  // North Acton
+  [51.51747345, -0.279364414],  // West Acton
+  [51.51449777, -0.299418497],  // Ealing Broadway
+  [51.51747345, -0.279364414],  // West Acton
+  [51.52310534, -0.258167978],  // North Acton
+  [51.51609001, -0.245569272],  // East Acton
+  [51.51170695, -0.222866489],  // White City
+  [51.50384346, -0.217238899],  // Shepherd's Bush
+  [51.50664438, -0.204062863],  // Holland Park
+  [51.5086469, -0.194491212],  // Notting Hill Gate
+  [51.50974305, -0.185538472],  // Queensway
+  [51.51117805, -0.173843886],  // Lancaster Gate
+  [51.51309055, -0.155755638],  // Marble Arch
+  [51.51387033, -0.148076884],  // Bond Street
+  [51.51481046, -0.140025246],  // Oxford Circus
+  [51.51594793, -0.128897348],  // Tottenham Court Road
+
+  [51.5177395, -0.109960547],  // Chancery Lane
+  [51.51444286, -0.095907533],  // St. Paul's
+  [51.51291511, -0.08729695],  // Bank
+  [51.5168424, -0.081601363],  // Liverpool Street
+  [51.52672839, -0.053074702],  // Bethnal Green
+  [51.52472507, -0.032150165],  // Mile End
+  [51.54094802, -0.002182514],  // Stratford
+  [51.55609689, -0.00386474],  // Leyton
+  [51.56781496, 0.009807678],  // Leytonstone
+  [51.58017276, 0.023019902],  // Snaresbrook
+  [51.59138934, 0.028990141],  // South Woodford
+  [51.60635963, 0.035640856],  // Woodford
+  [51.62548342, 0.048455336],  // Buckhurst Hill
+  [51.6408144, 0.056970973],  // Loughton
+  [51.64489405, 0.085403181],  // Debden
+  [51.67133739, 0.104967288],  // Theydon Bois
+  [51.69306818, 0.115641374],  // Epping
+
+  [51.69306818, 0.115641374],  // Epping
+  [51.67133739, 0.104967288],  // Theydon Bois
+  [51.64489405, 0.085403181],  // Debden
+  [51.6408144, 0.056970973],  // Loughton
+  [51.62548342, 0.048455336],  // Buckhurst Hill
+  [51.60635963, 0.035640856],  // Woodford
+  [51.59138934, 0.028990141],  // South Woodford
+  [51.58017276, 0.023019902],  // Snaresbrook
+  [51.56781496, 0.009807678],  // Leytonstone
+
+  [51.57509659, 0.030247766],  // Wanstead
+  [51.5757446, 0.047039301],  // Redbridge
+  [51.57602949, 0.067825538],  // Gants Hill
+  [51.57519974, 0.091554903],  // Newbury Park
+  [51.58519895, 0.090259547],  // Barkingside
+  [51.59505439, 0.092688126],  // Fairlop
+  [51.60313737, 0.095143844],  // Hainault
+  [51.61269646, 0.093957755],  // Grange Hill
+  [51.61715195, 0.077229167],  // Chigwell
+  [51.61657815, 0.045340184]  // Roding Valley
+
+  ]},
+
+  { color: '#0098D4', coords: [ // Victoria Line
+  [51.58261626, -0.019895332],  // Walthamstow Central	
+  [51.58633801, -0.040174342],  // Blackhorse Road	
+  [51.58754655, -0.058547162],  // Tottenham Hale	
+  [51.58289546, -0.070894139],  // Seven Sisters	
+  [51.56406609, -0.105068129],  // Finsbury Park	
+  [51.54691824, -0.102125867],  // Highbury & Islington	
+  [51.52927728, -0.123168404],  // King's Cross St. Pancras	
+  [51.52757668, -0.132992071],  // Euston	
+  [51.52401887, -0.136735811],  // Warren Street	
+  [51.51481046, -0.140025246],  // Oxford Circus	
+  [51.50635747, -0.140937126],  // Green Park	
+  [51.49588954, -0.141485017],  // Victoria	
+  [51.48856954, -0.132103672],  // Pimlico	
+  [51.48518446, -0.122646146],  // Vauxhall	
+  [51.47131386, -0.121436641],  // Stockwell	
+  [51.46215131, -0.113288835]  // Brixton	
+
+  ]},
+  { color: '#000000', coords: [ // Northern Line
+  [51.40201673, -0.193160282],  // Morden
+  [51.41446924, -0.191711278],  // South Wimbledon
+  [51.41763979, -0.176460893],  // Colliers Wood
+  [51.42715702, -0.166791248],  // Tooting Broadway
+  [51.4353811, -0.15763366],  // Tooting Bec
+  [51.44310998, -0.151090206],  // Balham
+  [51.45272059, -0.145610374],  // Clapham South
+  [51.46169503, -0.135588991],  // Clapham Common
+  [51.4652144, -0.127754372],  // Clapham North
+  [51.47131386, -0.121436641],  // Stockwell
+  [51.48132384, -0.110799082],  // Oval
+  [51.48782707, -0.104357247],  // Kennington
+  [51.4953253, -0.099577259],  // Elephant & Castle
+  [51.50067969, -0.091702818],  // Borough
+  [51.50455372, -0.088037808],  // London Bridge
+  [51.51291511, -0.08729695],  // Bank
+  [51.5178533, -0.087700241],  // Moorgate
+  [51.52457628, -0.086025441],  // Old Street
+  [51.5309796, -0.103116359],  // Angel
+  [51.52927728, -0.123168404],  // King's Cross St. Pancras
+  [51.52757668, -0.132992071],  // Euston
+  [51.53872412, -0.141016888],  // Camden Town
+  [51.54978865, -0.13914119],  // Kentish Town
+  [51.5563398, -0.136858377],  // Tufnell Park
+  [51.56403452, -0.13344404],  // Archway
+  [51.577342, -0.144860652],  // Highgate
+  [51.58665344, -0.163438627],  // East Finchley
+  [51.60043321, -0.190951925],  // Finchley Central
+  [51.60773582, -0.208460194],  // Mill Hill East
+  [51.60043321, -0.190951925],  // Finchley Central
+  [51.60898928, -0.186738929],  // West Finchley
+  [51.61758971, -0.183907004],  // Woodside Park
+  [51.63009248, -0.177599794],  // Totteridge & Whetstone
+  [51.65002914, -0.192561468],  // High Barnet
+  [51.63009248, -0.177599794],  // Totteridge & Whetstone
+  [51.61758971, -0.183907004],  // Woodside Park
+  [51.60898928, -0.186738929],  // West Finchley
+  [51.60043321, -0.190951925],  // Finchley Central
+  [51.58665344, -0.163438627],  // East Finchley
+  [51.577342, -0.144860652],  // Highgate
+  [51.56403452, -0.13344404],  // Archway
+  [51.5563398, -0.136858377],  // Tufnell Park
+  [51.54978865, -0.13914119],  // Kentish Town
+  [51.53872412, -0.141016888],  // Camden Town
+  [51.54335257, -0.151037017],  // Chalk Farm
+  [51.54982085, -0.163016956],  // Belsize Park
+  [51.55608598, -0.17692039],  // Hampstead
+  [51.57178437, -0.192420671],  // Golders Green
+  [51.57616797, -0.212185251],  // Brent Cross
+  [51.58267136, -0.224748399],  // Hendon Central
+  [51.60233699, -0.262398845],  // Burnt Oak
+  [51.61311251, -0.273183711],  // Edgware
+  [51.60233699, -0.262398845],  // Burnt Oak
+  [51.58267136, -0.224748399],  // Hendon Central
+  [51.57616797, -0.212185251],  // Brent Cross
+  [51.57178437, -0.192420671],  // Golders Green
+  [51.55608598, -0.17692039],  // Hampstead
+  [51.54982085, -0.163016956],  // Belsize Park
+  [51.54335257, -0.151037017],  // Chalk Farm
+  [51.53872412, -0.141016888],  // Camden Town
+  [51.53419787, -0.137143461],  // Mornington Crescent
+  [51.52757668, -0.132992071],  // Euston
+  [51.52401887, -0.136735811],  // Warren Street
+  [51.52009307, -0.132736642],  // Goodge Street
+  [51.51594793, -0.128897348],  // Tottenham Court Road
+  [51.51089472, -0.126725567],  // Leicester Square
+  [51.50686754, -0.125777173],  // Charing Cross
+  [51.50694137, -0.120562428],  // Embankment
+  [51.50291418, -0.112818812],  // Waterloo
+  [51.48782707, -0.104357247],  // Kennington
+  [51.479732, -0.128576],  // Nine Elms
+  [51.479771, -0.141867]  // Battersea Power Station
+
+  ]},
+  { color: '#B36305', coords: [ // Bakerloo Line
+  [51.59154651, -0.333300136],  // Harrow & Wealdstone
+  [51.58111281, -0.315140189],  // Kenton
+  [51.56971265, -0.306785037],  // South Kenton
+  [51.56189247, -0.302293996],  // North Wembley
+  [51.55177912, -0.295237517],  // Wembley Central
+  [51.54368887, -0.27487576],  // Stonebridge Park
+  [51.53619355, -0.256997378],  // Harlesden
+  [51.5318981, -0.242978972],  // Willesden Junction
+  [51.5300656, -0.222882378],  // Kensal Green
+  [51.53347212, -0.204142926],  // Queen's Park
+  [51.53444139, -0.192420271],  // Kilburn Park
+  [51.52922219, -0.184228557],  // Maida Vale
+  [51.52269118, -0.182005998],  // Warwick Avenue
+  [51.52165079, -0.162637346],  // Marylebone
+  [51.51996099, -0.168645951],  // Edgware Road (Bakerloo)
+  [51.51499491, -0.173789485],  // Paddington
+  [51.51309055, -0.155755638],  // Marble Arch
+  [51.51481046, -0.140025246],  // Oxford Circus
+  [51.51594793, -0.128897348],  // Tottenham Court Road
+  [51.51089472, -0.126725567],  // Leicester Square
+  [51.50686754, -0.125777173],  // Charing Cross
+  [51.49833058, -0.110624882],  // Lambeth North
+  [51.4953253, -0.099577259]  // Elephant & Castle
+
+  ]},
+ { color: '#003688', coords: [ // Piccadily Line
+  [51.54596187, -0.4760666],  // Uxbridge
+  [51.55344939, -0.447812239],  // Hillingdon
+  [51.56146986, -0.440467266],  // Ickenham
+  [51.57079343, -0.420215108],  // Ruislip
+  [51.57297789, -0.410235646],  // Ruislip Manor
+  [51.57601384, -0.39578946],  // Eastcote
+  [51.57469667, -0.369864752],  // Rayners Lane
+  [51.56404932, -0.350509518],  // South Harrow
+  [51.55646384, -0.335039246],  // Sudbury Hill
+  [51.55030341, -0.314159662],  // Sudbury Town
+  [51.54022715, -0.298361133],  // Alperton
+  [51.52597425, -0.282378071],  // Park Royal
+  [51.51697561, -0.287236576],  // North Ealing
+  [51.50903565, -0.286555479],  // Ealing Common
+  [51.50213702, -0.278432824],  // Acton Town
+  [51.50039136, -0.305919519],  // South Ealing
+  [51.49914634, -0.311409865],  // Northfields
+  [51.494711, -0.32401176],  // Boston Manor
+  [51.48073359, -0.350640896],  // Osterley
+  [51.47275219, -0.3547554],  // Hounslow East
+  [51.470809, -0.364716069],  // Hounslow Central
+  [51.47310845, -0.384218262],  // Hounslow West
+  [51.4661174, -0.42189306],  // Hatton Cross
+  [51.47079421, -0.450857772],  // Heathrow Terminals 1-2-3
+  [51.47201647, -0.486475608],  // Heathrow Terminal 5
+  [51.45802947, -0.444145672],  // Heathrow Terminal 4
+  [51.4661174, -0.42189306],  // Hatton Cross
+  [51.47310845, -0.384218262],  // Hounslow West
+  [51.470809, -0.364716069],  // Hounslow Central
+  [51.47275219, -0.3547554],  // Hounslow East
+  [51.48073359, -0.350640896],  // Osterley
+  [51.494711, -0.32401176],  // Boston Manor
+  [51.49914634, -0.311409865],  // Northfields
+  [51.50039136, -0.305919519],  // South Ealing
+  [51.50213702, -0.278432824],  // Acton Town
+  [51.494448, -0.252958803],  // Turnham Green
+  [51.49148885, -0.22144689],  // Hammersmith (Dist&Picc Line)
+  [51.48978737, -0.213088174],  // Barons Court
+  [51.4914734, -0.19157701],  // Earl's Court
+  [51.49397763, -0.182135121],  // Gloucester Road
+  [51.49357736, -0.171564291],  // South Kensington
+  [51.50073061, -0.159863737],  // Knightsbridge
+  [51.50224103, -0.152546395],  // Hyde Park Corner
+  [51.50635747, -0.140937126],  // Green Park
+  [51.50955061, -0.132081484],  // Piccadilly Circus
+  [51.51089472, -0.126725567],  // Leicester Square
+  [51.51263471, -0.122759938],  // Covent Garden
+  [51.51706879, -0.1188087],  // Holborn
+  [51.52255053, -0.122662273],  // Russell Square
+  [51.52927728, -0.123168404],  // King's Cross St. Pancras
+  [51.54801774, -0.116864262],  // Caledonian Road
+  [51.55225038, -0.111653531],  // Holloway Road
+  [51.55811105, -0.105674399],  // Arsenal
+  [51.56406609, -0.105068129],  // Finsbury Park
+  [51.57024769, -0.094452148],  // Manor House
+  [51.58975112, -0.101359413],  // Turnpike Lane
+  [51.5969712, -0.108246806],  // Wood Green
+  [51.60656487, -0.122731021],  // Bounds Green
+  [51.61595478, -0.131434823],  // Arnos Grove
+  [51.6317626, -0.126150933],  // Southgate
+  [51.64683948, -0.129657109],  // Oakwood
+  [51.65103526, -0.147553187]  // Cockfosters
+
+  ]},
+{ color: '#007229', coords: [ // District Line
+  [51.42091587, -0.204921053],  // Wimbledon
+  [51.43353749, -0.19749098],  // Wimbledon Park
+  [51.4445635, -0.205058529],  // Southfields
+  [51.45863492, -0.209468663],  // East Putney
+  [51.46774182, -0.207131382],  // Putney Bridge
+  [51.47447238, -0.200166803],  // Parsons Green
+  [51.48025536, -0.193168686],  // Fulham Broadway
+  [51.48676791, -0.193973832],  // West Brompton
+  [51.4914734, -0.19157701],  // Earl's Court
+  [51.49722528, -0.208533266],  // Kensington (Olympia)
+  [51.4914734, -0.19157701],  // Earl's Court
+  [51.49027946, -0.203860054],  // West Kensington
+  [51.48978737, -0.213088174],  // Barons Court
+  [51.49148885, -0.22144689],  // Hammersmith (Dist&Picc Line)
+  [51.49365752, -0.234181724],  // Ravenscourt Park
+  [51.49440814, -0.244408726],  // Stamford Brook
+  [51.494448, -0.252958803],  // Turnham Green
+  [51.49415785, -0.266981606],  // Chiswick Park
+  [51.50213702, -0.278432824],  // Acton Town
+  [51.50903565, -0.286555479],  // Ealing Common
+  [51.51449777, -0.299418497],  // Ealing Broadway
+  [51.50903565, -0.286555479],  // Ealing Common
+  [51.50213702, -0.278432824],  // Acton Town
+  [51.49415785, -0.266981606],  // Chiswick Park
+  [51.494448, -0.252958803],  // Turnham Green
+  [51.49123204, -0.273547129],  // Gunnersbury
+  [51.47648632, -0.283453589],  // Kew Gardens
+  [51.46260595, -0.300084253],  // Richmond
+  [51.47648632, -0.283453589],  // Kew Gardens
+  [51.49123204, -0.273547129],  // Gunnersbury
+  [51.494448, -0.252958803],  // Turnham Green
+  [51.49440814, -0.244408726],  // Stamford Brook
+  [51.49365752, -0.234181724],  // Ravenscourt Park
+  [51.49148885, -0.22144689],  // Hammersmith (Dist&Picc Line)
+  [51.48978737, -0.213088174],  // Barons Court
+  [51.49027946, -0.203860054],  // West Kensington
+  [51.4914734, -0.19157701],  // Earl's Court
+  [51.49397763, -0.182135121],  // Gloucester Road
+  [51.49357736, -0.171564291],  // South Kensington
+  [51.49182524, -0.15473274],  // Sloane Square
+  [51.49588954, -0.141485017],  // Victoria
+  [51.49905006, -0.132021543],  // St. James's Park
+  [51.50045311, -0.124052209],  // Westminster
+  [51.50694137, -0.120562428],  // Embankment
+  [51.5104742, -0.112643564],  // Temple
+  [51.51111447, -0.102020251],  // Blackfriars
+  [51.51130597, -0.092495313],  // Mansion House
+  [51.51096254, -0.088801035],  // Cannon Street
+  [51.51020898, -0.084502291],  // Monument
+  [51.50943419, -0.074913869],  // Tower Hill
+  [51.51491653, -0.069540402],  // Aldgate East
+  [51.51901529, -0.05838503],  // Whitechapel
+  [51.52135166, -0.044974603],  // Stepney Green
+  [51.52472507, -0.032150165],  // Mile End
+  [51.52639287, -0.02358427],  // Bow Road
+  [51.52424987, -0.009841042],  // Bromley-by-Bow
+  [51.52776913, 0.00590508],  // West Ham
+  [51.53072137, 0.018612643],  // Plaistow
+  [51.53487026, 0.036836325],  // Upton Park
+  [51.5388975, 0.054454908],  // East Ham
+  [51.53937511, 0.081813552],  // Barking
+  [51.53784406, 0.103187503],  // Upney
+  [51.53983401, 0.128978641],  // Becontree
+  [51.54110645, 0.149158377],  // Dagenham Heathway
+  [51.54364955, 0.167617456],  // Dagenham East
+  [51.54920911, 0.200311564],  // Elm Park
+  [51.55353835, 0.220754707],  // Hornchurch
+  [51.55798569, 0.237476635],  // Upminster Bridge
+  [51.55857711, 0.252767235]  // Upminster
+
+
+ ]},
+
+{ color: '#F3A9BB', coords: [ // H&C Line
+  [51.49327356, -0.223334507],  // Hammersmith (H&C Line)
+  [51.50148234, -0.225049873],  // Goldhawk Road
+  [51.50558155, -0.224700725],  // Shepherd's Bush Market
+  [51.50963208, -0.221994162],  // Wood Lane
+  [51.51295039, -0.216257476],  // Latimer Road
+  [51.51681261, -0.209304449],  // Ladbroke Grove
+  [51.52041239, -0.199554267],  // Westbourne Park
+  [51.51854003, -0.186186162],  // Royal Oak
+  [51.51499491, -0.173789485],  // Paddington
+  [51.51936413, -0.166170742],  // Edgware Road (Circle Line)
+  [51.52249387, -0.155454387],  // Baker Street
+  [51.52333822, -0.142685711],  // Great Portland Street
+  [51.52512499, -0.134270582],  // Euston Square
+  [51.52927728, -0.123168404],  // King's Cross St. Pancras
+  [51.51996102, -0.103582415],  // Farringdon
+  [51.51969921, -0.097189673],  // Barbican
+  [51.5178533, -0.087700241],  // Moorgate
+  [51.5168424, -0.081601363],  // Liverpool Street
+  [51.51491653, -0.069540402],  // Aldgate East
+  [51.51901529, -0.05838503],  // Whitechapel
+  [51.52135166, -0.044974603],  // Stepney Green
+  [51.52472507, -0.032150165],  // Mile End
+  [51.52639287, -0.02358427],  // Bow Road
+  [51.52424987, -0.009841042],  // Bromley-by-Bow
+  [51.52776913, 0.00590508],  // West Ham
+  [51.53072137, 0.018612643],  // Plaistow
+  [51.53487026, 0.036836325],  // Upton Park
+  [51.5388975, 0.054454908],  // East Ham
+  [51.53937511, 0.081813552],  // Barking
+ ]},
+
+{ color: '#9B0056', coords: [ // Met Line
+  [51.51398203, -0.0742363],  // Aldgate
+  [51.5168424, -0.081601363],  // Liverpool Street
+  [51.5178533, -0.087700241],  // Moorgate
+  [51.51969921, -0.097189673],  // Barbican
+  [51.51996102, -0.103582415],  // Farringdon
+  [51.52927728, -0.123168404],  // King's Cross St. Pancras
+  [51.52512499, -0.134270582],  // Euston Square
+  [51.52333822, -0.142685711],  // Great Portland Street
+  [51.52249387, -0.155454387],  // Baker Street
+  [51.54672589, -0.179489511],  // Finchley Road
+  [51.56325938, -0.278458638],  // Wembley Park
+  [51.57151381, -0.293539223],  // Preston Road
+  [51.57797585, -0.316478653],  // Northwick Park
+  [51.57891586, -0.33516664],  // Harrow-on-the-Hill
+  [51.57906815, -0.351706569],  // West Harrow
+  [51.57469667, -0.369864752],  // Rayners Lane
+  [51.57601384, -0.39578946],  // Eastcote
+  [51.57297789, -0.410235646],  // Ruislip Manor
+  [51.57079343, -0.420215108],  // Ruislip
+  [51.56146986, -0.440467266],  // Ickenham
+  [51.55344939, -0.447812239],  // Hillingdon
+  [51.54596187, -0.4760666],  // Uxbridge
+  [51.55344939, -0.447812239],  // Hillingdon
+  [51.56146986, -0.440467266],  // Ickenham
+  [51.57079343, -0.420215108],  // Ruislip
+  [51.57297789, -0.410235646],  // Ruislip Manor
+  [51.57601384, -0.39578946],  // Eastcote
+  [51.57469667, -0.369864752],  // Rayners Lane
+  [51.57906815, -0.351706569],  // West Harrow
+  [51.57891586, -0.33516664],  // Harrow-on-the-Hill
+  [51.58444941, -0.361021834],  // North Harrow
+  [51.59232907, -0.379580851],  // Pinner
+  [51.59969703, -0.407168137],  // Northwood Hills
+  [51.61052039, -0.422358538],  // Northwood
+  [51.6293749, -0.430710233],  // Moor Park
+  [51.64658792, -0.44019171],  // Croxley
+  [51.65699167, -0.415832512],  // Watford
+  [51.64658792, -0.44019171],  // Croxley
+  [51.6293749, -0.430710233],  // Moor Park
+  [51.63979883, -0.472133393],  // Rickmansworth
+  [51.65380677, -0.516985176],  // Chorleywood
+  [51.66754646, -0.559159868],  // Chalfont & Latimer
+  [51.67366188, -0.606146762],  // Amersham
+  [51.66754646, -0.559159868],  // Chalfont & Latimer
+  [51.70474175, -0.609421076],  // Chesham
+  [51.66754646, -0.559159868],  // Chalfont & Latimer
+  [51.65380677, -0.516985176],  // Chorleywood
+  [51.63979883, -0.472133393],  // Rickmansworth
+  [51.6293749, -0.430710233],  // Moor Park
+  [51.61052039, -0.422358538],  // Northwood
+  [51.59969703, -0.407168137],  // Northwood Hills
+  [51.59232907, -0.379580851],  // Pinner
+  [51.58444941, -0.361021834],  // North Harrow
+  [51.57891586, -0.33516664],  // Harrow-on-the-Hill
+  [51.57797585, -0.316478653],  // Northwick Park
+  [51.57151381, -0.293539223],  // Preston Road
+  [51.56325938, -0.278458638],  // Wembley Park
+  [51.54672589, -0.179489511],  // Finchley Road
+  [51.52249387, -0.155454387],  // Baker Street
+  [51.52333822, -0.142685711],  // Great Portland Street
+  [51.52512499, -0.134270582],  // Euston Square
+  [51.52927728, -0.123168404],  // King's Cross St. Pancras
+  [51.51996102, -0.103582415],  // Farringdon
+  [51.51969921, -0.097189673],  // Barbican
+  [51.5178533, -0.087700241],  // Moorgate
+  [51.5168424, -0.081601363],  // Liverpool Street
+  [51.51398203, -0.0742363],  // Aldgate
+ ]},
+
+{ color: '#FFD300', coords: [ // Circle Line
+  [51.49327356, -0.223334507],  // Hammersmith (H&C Line)
+  [51.50148234, -0.225049873],  // Goldhawk Road
+  [51.50558155, -0.224700725],  // Shepherd's Bush Market
+  [51.50963208, -0.221994162],  // Wood Lane
+  [51.51295039, -0.216257476],  // Latimer Road
+  [51.51681261, -0.209304449],  // Ladbroke Grove
+  [51.52041239, -0.199554267],  // Westbourne Park
+  [51.51854003, -0.186186162],  // Royal Oak
+  [51.51499491, -0.173789485],  // Paddington
+  [51.51936413, -0.166170742],  // Edgware Road (Circle Line)
+  [51.52249387, -0.155454387],  // Baker Street
+  [51.52333822, -0.142685711],  // Great Portland Street
+  [51.52512499, -0.134270582],  // Euston Square
+  [51.52927728, -0.123168404],  // King's Cross St. Pancras
+  [51.51996102, -0.103582415],  // Farringdon
+  [51.51969921, -0.097189673],  // Barbican
+  [51.5178533, -0.087700241],  // Moorgate
+  [51.5168424, -0.081601363],  // Liverpool Street
+  [51.51398203, -0.0742363],  // Aldgate
+  [51.50943419, -0.074913869],  // Tower Hill
+  [51.51020898, -0.084502291],  // Monument
+  [51.51096254, -0.088801035],  // Cannon Street
+  [51.51130597, -0.092495313],  // Mansion House
+  [51.51111447, -0.102020251],  // Blackfriars
+  [51.5104742, -0.112643564],  // Temple
+  [51.50694137, -0.120562428],  // Embankment
+  [51.50045311, -0.124052209],  // Westminster
+  [51.49905006, -0.132021543],  // St. James's Park
+  [51.49588954, -0.141485017],  // Victoria
+  [51.49182524, -0.15473274],  // Sloane Square
+  [51.49357736, -0.171564291],  // South Kensington
+  [51.49397763, -0.182135121],  // Gloucester Road
+  [51.49993492, -0.190607248],  // High Street Kensington
+  [51.5086469, -0.194491212],  // Notting Hill Gate
+  [51.51181507, -0.186322701],  // Bayswater
+  [51.51499491, -0.173789485],  // Paddington
+  [51.51936413, -0.166170742]  // Edgware Road (Circle Line)
+ ]},
+
+{ color: '#95CDBA', coords: [ // Waterloo & City Line
+  [51.51291511, -0.08729695],  // Bank
+  [51.50291418, -0.112818812]  // Waterloo
+ ]},
+
+{ color: '#6950A1', coords: [ // Elizabeth Line
+  [51.4586577879285, -0.971308276212635],  // Reading
+  [51.4761627311658, -0.862957795511984],  // Twyford
+  [51.5191338703711, -0.722478745480944],  // Maidenhead
+  [51.5239529735481, -0.6812233608216223, -0.681223360821622],  // Taplow
+  [51.5240909254467, -0.645457607380015],  // Burnham
+  [51.5122546679199, -0.589765489128958],  // Slough
+  [51.5082917574064, -0.54171899152107],  // Langley
+  [51.5086901445886, -0.50629450686491],  // Iver
+  [51.5104068617935, -0.47250016083137],  // West Drayton
+  [51.5032247734046, -0.420034614803956],  // Hayes & Harlington
+  [51.506647485465, -0.377291235168209],  // Southall
+  [51.5121922112504, -0.338451880310608],  // Hanwell
+  [51.5139943445922, -0.321135744958428],  // West Ealing
+  [51.51449777, -0.299418497],  // Ealing Broadway
+  [51.5172409403585, -0.266729414267616],  // Acton Main Line
+  [51.51499491, -0.173789485],  // Paddington
+  [51.51387033, -0.148076884],  // Bond Street
+  [51.51594793, -0.128897348],  // Tottenham Court Road
+  [51.51996102, -0.103582415],  // Farringdon
+  [51.5168424, -0.081601363],  // Liverpool Street
+  [51.51901529, -0.05838503],  // Whitechapel
+  [51.50291749, -0.016134819],  // Canary Wharf
+  [51.5103911198559, 0.0272275732982798],  // Custom House
+  [51.4924134177599, 0.0710398955118523],  // Woolwich
+  [51.4912777450533, 0.120979093648659],  // Abbey Wood
+  [51.4924134177599, 0.0710398955118523],  // Woolwich
+  [51.5103911198559, 0.0272275732982798],  // Custom House
+  [51.50291749, -0.016134819],  // Canary Wharf
+  [51.51901529, -0.05838503],  // Whitechapel
+  [51.54094802, -0.002182514],  // Stratford
+  [51.54554249, 0.007539167],  // Maryland
+  [51.54895648, 0.02615387],  // Forest Gate
+  [51.55189321, 0.047651015],  // Manor Park
+  [51.55848898, 0.07080065],  // Ilford
+  [51.5634541, 0.098722803],  // Seven Kings
+  [51.56500163, 0.112414564],  // Goodmayes
+  [51.56749975, 0.130973337],  // Chadwell Heath
+  [51.57454494, 0.184863954],  // Romford
+  [51.58117713, 0.2071101],  // Gidea Park
+  [51.59219909, 0.234666819],  // Harold Wood
+  [51.61307149, 0.301589064],  // Brentwood
+  [51.6300009, 0.331671253],  // Shenfield
+  [51.61307149, 0.301589064],  // Brentwood
+  [51.59219909, 0.234666819],  // Harold Wood
+  [51.58117713, 0.2071101],  // Gidea Park
+  [51.57454494, 0.184863954],  // Romford
+  [51.56749975, 0.130973337],  // Chadwell Heath
+  [51.56500163, 0.112414564],  // Goodmayes
+  [51.5634541, 0.098722803],  // Seven Kings
+  [51.55848898, 0.07080065],  // Ilford
+  [51.55189321, 0.047651015],  // Manor Park
+  [51.54895648, 0.02615387],  // Forest Gate
+  [51.54554249, 0.007539167],  // Maryland
+  [51.54094802, -0.002182514],  // Stratford
+  [51.51901529, -0.05838503],  // Whitechapel
+  [51.5168424, -0.081601363],  // Liverpool Street
+  [51.51996102, -0.103582415],  // Farringdon
+  [51.51594793, -0.128897348],  // Tottenham Court Road
+  [51.51387033, -0.148076884],  // Bond Street
+  [51.51499491, -0.173789485],  // Paddington
+  [51.5172409403585, -0.266729414267616],  // Acton Main Line
+  [51.51449777, -0.299418497],  // Ealing Broadway
+  [51.5139943445922, -0.321135744958428],  // West Ealing
+  [51.5121922112504, -0.338451880310608],  // Hanwell
+  [51.506647485465, -0.377291235168209],  // Southall
+  [51.5032247734046, -0.420034614803956],  // Hayes & Harlington
+  [51.47079421, -0.450857772],  // Heathrow Terminals 1-2-3
+  [51.47201647, -0.486475608],  // Heathrow Terminal 5
+  [51.47079421, -0.450857772],  // Heathrow Terminals 1-2-3
+  [51.45802947, -0.444145672],  // Heathrow Terminal 4
+  [51.47079421, -0.450857772]  // Heathrow Terminals 1-2-3
+ ]},
+
+
+{ color: '#A0A5A9', coords: [ // Jubilee Line
+  [51.61921632, -0.30167142],  // Stanmore
+  [51.60721294, -0.293102561],  // Canons Park
+  [51.59369962, -0.284629817],  // Queensbury
+  [51.58414203, -0.277052309],  // Kingsbury
+  [51.56325938, -0.278458638],  // Wembley Park
+  [51.5539234, -0.24957656],  // Neasden
+  [51.55145847, -0.237445148],  // Dollis Hill
+  [51.54886838, -0.221119357],  // Willesden Green
+  [51.54644842, -0.203115567],  // Kilburn
+  [51.54629707, -0.188568627],  // West Hampstead
+  [51.54672589, -0.179489511],  // Finchley Road
+  [51.54319998, -0.173237239],  // Swiss Cottage
+  [51.53469852, -0.172545248],  // St. John's Wood
+  [51.52249387, -0.155454387],  // Baker Street
+  [51.51387033, -0.148076884],  // Bond Street
+  [51.50635747, -0.140937126],  // Green Park
+  [51.50045311, -0.124052209],  // Westminster
+  [51.50291418, -0.112818812],  // Waterloo
+  [51.50377646, -0.103788452],  // Southwark
+  [51.50455372, -0.088037808],  // London Bridge
+  [51.49718984, -0.062745893],  // Bermondsey
+  [51.49744864, -0.048105945],  // Canada Water
+  [51.50291749, -0.016134819],  // Canary Wharf
+  [51.50002099, 0.005908784],  // North Greenwich
+  [51.51360991, 0.009568884],  // Canning Town
+  [51.52776913, 0.00590508],  // West Ham
+  [51.54094802, -0.002182514]  // Stratford
+
+ ]}
+
+];
+
+let stationQueue = [];
+let currentIndex = 0;
+let currentStation = null;
+let totalPenalty = 0;
+let clickDisabled = false;
+
+
+const map = L.map('map').setView([51.4965, -0.1447], 13); // Center on Victoria
+
+// Base map tiles without labels to keep map clean
+const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap contributors &copy; CartoDB'
+}).addTo(map);
+
+// Draw baked-in tube lines
+function drawTubeLines() {
+  tubeLines.forEach(line => {
+    L.polyline(line.coords, {
+      color: line.color,
+      weight: 4,
+      opacity: 0.7,
+      smoothFactor: 1
+    }).addTo(map);
+  });
+}
+
+// Add starting marker labeled Victoria Station House and open its popup
+const startMarker = L.marker([51.4965, -0.1447]).addTo(map)
+  .bindPopup("Victoria Station House (Start)").openPopup();
+
+function shuffleStations() {
+  stationQueue = stations.slice();
+  for (let i = stationQueue.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [stationQueue[i], stationQueue[j]] = [stationQueue[j], stationQueue[i]];
+  }
+  currentIndex = 0;
+}
+
+function chooseStation() {
+  if (currentIndex >= stationQueue.length) {
+    gameOver = true; // Flag the game as complete
+    document.getElementById('stationName').textContent = "Game Complete!";
+    alert(`Game over! Your total penalty points: ${totalPenalty}`);
+    document.getElementById('endOptions').style.display = 'block';
+    return;
+  }
+  currentStation = stationQueue[currentIndex];
+  document.getElementById('stationName').textContent = currentStation.name;
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+let gameOver = false;
+
+map.on('click', function(e) {
+  if (!currentStation || clickDisabled || gameOver) return;  // Ignore clicks if disabled or no current station
+
+  clickDisabled = true;  // Disable further clicks immediately
+
+  const guessLat = e.latlng.lat;
+  const guessLon = e.latlng.lng;
+  const distance = Math.round(
+    calculateDistance(guessLat, guessLon, currentStation.lat, currentStation.lon)
+  );
+
+  totalPenalty += distance;
+  document.getElementById('score').textContent = totalPenalty;
+
+  L.marker([guessLat, guessLon]).addTo(map)
+    .bindPopup(`Your guess`).openPopup();
+
+  L.marker([currentStation.lat, currentStation.lon], {
+    icon: L.icon({
+      iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-red.png',
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    })
+  }).addTo(map)
+    .bindPopup(`${currentStation.name} (Actual)<br>Distance: ${distance} meters`).openPopup();
+
+  const tbody = document.getElementById('resultsTable').querySelector('tbody');
+  const row = document.createElement('tr');
+  row.innerHTML = `<td>${currentStation.name}</td><td>${distance}</td>`;
+  tbody.appendChild(row);
+
+  setTimeout(() => {
+    currentIndex++;
+    chooseStation();
+    clickDisabled = false;  // Re-enable clicks after 3 seconds
+  }, 3000);
+});
+
+function restartGame() {
+  totalPenalty = 0;
+  document.getElementById('score').textContent = totalPenalty;
+  document.getElementById('endOptions').style.display = 'none';
+  document.getElementById('resultsTable').querySelector('tbody').innerHTML = '';
+
+  // Remove all markers and polylines (tube lines) except tileLayer
+  map.eachLayer(layer => {
+    // Remove all except tileLayer
+    if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+      map.removeLayer(layer);
+    }
+  });
+
+  // Re-add tube lines and start marker
+  drawTubeLines();
+  startMarker.addTo(map);
+
+  // Reset game variables
+  shuffleStations();    // reshuffle the station queue
+  currentIndex = 0;     // reset index
+  currentStation = null;
+  
+  // Choose first station to start the game
+  chooseStation();
+}
+
+
+function copyTable() {
+  let text = 'Station,Distance (m)\n';
+  document.querySelectorAll('#resultsTable tbody tr').forEach(row => {
+    const cells = row.querySelectorAll('td');
+    text += `${cells[0].textContent},${cells[1].textContent}\n`;
+  });
+  navigator.clipboard.writeText(text).then(() => {
+    alert("Results table copied to clipboard!");
+  }).catch(err => {
+    alert("Failed to copy: " + err);
+  });
+}
+
+function downloadCSV() {
+  let csv = 'Station,Distance (m)\n';
+  document.querySelectorAll('#resultsTable tbody tr').forEach(row => {
+    const cells = row.querySelectorAll('td');
+    csv += `${cells[0].textContent},${cells[1].textContent}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'station_guess_results.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Initialize the game
+drawTubeLines();
+shuffleStations();
+chooseStation();
+
+</script>
+
+</body>
+</html>
+
