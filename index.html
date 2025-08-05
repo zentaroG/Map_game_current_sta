@@ -780,12 +780,17 @@ function copyTable() {
     const cells = row.querySelectorAll('td');
     text += `${cells[0].textContent},${cells[1].textContent}\n`;
   });
+
+  // Append total penalty to the copied text
+  text += `\nTotal Penalty Points,${totalPenalty}`;
+
   navigator.clipboard.writeText(text).then(() => {
     alert("Results table copied to clipboard!");
   }).catch(err => {
     alert("Failed to copy: " + err);
   });
 }
+
 
 function downloadCSV() {
   let csv = 'Station,Distance (m)\n';
